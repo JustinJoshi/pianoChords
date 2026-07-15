@@ -73,17 +73,23 @@ function formatChordSymbol(rootPc, chordKey) {
   return getNoteName(rootPc) + chord.symbol;
 }
 
-function generateChord(keySet, activePools) {
+function generateChord(keySet, activePools, forcedChordKey = null) {
   const rootPc = keySet[Math.floor(Math.random() * keySet.length)];
 
-  const available = [];
-  if (activePools.basic7) available.push(...POOLS.basic7);
-  if (activePools.extended) available.push(...POOLS.extended);
-  if (activePools.altered) available.push(...POOLS.altered);
+  let chordKey;
+  if (forcedChordKey && CHORDS[forcedChordKey]) {
+    chordKey = forcedChordKey;
+  } else {
+    const available = [];
+    if (activePools.basic7) available.push(...POOLS.basic7);
+    if (activePools.extended) available.push(...POOLS.extended);
+    if (activePools.altered) available.push(...POOLS.altered);
 
-  if (available.length === 0) available.push(...POOLS.basic7);
+    if (available.length === 0) available.push(...POOLS.basic7);
 
-  const chordKey = available[Math.floor(Math.random() * available.length)];
+    chordKey = available[Math.floor(Math.random() * available.length)];
+  }
+
   const chord = CHORDS[chordKey];
 
   return {

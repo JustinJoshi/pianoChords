@@ -27,9 +27,15 @@ body {
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
   padding-bottom: 8px;
   border-bottom: 1px solid #2a2d35;
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .title {
@@ -42,6 +48,23 @@ body {
   font-size: 0.9rem;
   color: #8b92a8;
   font-variant-numeric: tabular-nums;
+}
+
+.srs-stats {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.retrievability {
+  font-size: 0.85rem;
+  color: #8b92a8;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.retrievability.hidden {
+  display: none;
 }
 
 /* Controls */

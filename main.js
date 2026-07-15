@@ -117,25 +117,100 @@ function recordTime() {
   return elapsed;
 }
 
+// ── SRS stats ──
+function updateSRSStats() {
+  if (!window.srs) return;
+  try {
+    const stats = window.srs.getStats(activePools);
+    const el = document.getElementById('srs-stats');
+    if (el) el.textContent = `Due: ${stats.due} · New: ${stats.new}`;
+  } catch (e) {
+    console.error('SRS stats error:', e);
+  }
+}
+
 // ── Drill flow ──
 function nextRound() {
+  // If user skipped without revealing, record as Again
+  if (awaitingChord && currentChord && window.srs) {
+    try {
+      window.srs.recordResult(currentChord.chordKey, 'Again');
+      updateSRSStats();
+    } catch (e) {
+      console.error('SRS skip-record error:', e);
+    }
+  }
+
   const keySet = usePopKeys ? [0, 7, 2, 9, 4] : (use12Keys ? KEYS_12 : KEYS_5);
-  currentChord = generateChord(keySet, activePools);
+
+  let nextChordKey = null;
+  if (window.srs) {
+    try {
+      nextChordKey = window.srs.getNextCard(activePools, currentChord?.chordKey);
+    } catch (e) {
+      console.error('SRS selection error:', e);
+    }
+  }
+
+  currentChord = generateChord(keySet, activePools, nextChordKey);
   elSymbol.textContent = currentChord.symbol;
   elSymbol.classList.remove('success');
   elRevealPanel.classList.add('hidden');
   elHeldNotes.textContent = '';
   awaitingChord = true;
 
+  const elRet = document.getElementById('reveal-retrievability');
+  if (elRet) elRet.classList.add('hidden');
+
   setRequiredPitchClasses(Array.from(currentChord.requiredPitchClasses));
   startTimer();
+  updateSRSStats();
 }
 
 function doReveal(auto = false) {
-  if (!currentChord) return;
+  if (!currentChord || !awaitingChord) return;
   awaitingChord = false;
 
-  const elapsed = recordTime();
+  const elapsedMs = recordTime();
+  const elapsedSec = elapsedMs / 1000;
+
+  // Determine FSRS grade
+  let grade;
+  if (auto) {
+    // Matched via MIDI before pressing Reveal
+    if (elapsedSec < TARGET_SECONDS * 0.5) grade = 'Easy';
+    else if (elapsedSec < TARGET_SECONDS) grade = 'Good';
+    else grade = 'Hard';
+  } else {
+    const midiConnected = midiAccess && midiAccess.inputs && midiAccess.inputs.size > 0;
+    if (midiConnected) {
+      // MIDI is connected but user pressed Reveal manually → failed to match
+      grade = 'Again';
+    } else {
+      // No MIDI — derive grade from reveal speed
+      if (elapsedSec < TARGET_SECONDS * 0.5) grade = 'Easy';
+      else if (elapsedSec < TARGET_SECONDS) grade = 'Good';
+      else if (elapsedSec < TARGET_SECONDS * 2) grade = 'Hard';
+      else grade = 'Again';
+    }
+  }
+
+  if (window.srs && currentChord.chordKey) {
+    try {
+      window.srs.recordResult(currentChord.chordKey, grade);
+      updateSRSStats();
+
+      const ret = window.srs.getRetrievability(currentChord.chordKey);
+      const elRet = document.getElementById('reveal-retrievability');
+      if (elRet && ret !== null) {
+        elRet.textContent = `Strength: ${(ret * 100).toFixed(0)}%`;
+        elRet.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.error('SRS record error:', e);
+    }
+  }
+
   elRevealPanel.classList.remove('hidden');
   elRevealTones.textContent = currentChord.tones.join('  ');
   elRevealScale.textContent = currentChord.scaleName;
@@ -168,9 +243,9 @@ elReveal.addEventListener('click', () => doReveal(false));
 elMIDIBtn.addEventListener('click', connectMIDI);
 
 elToggle12.addEventListener('change', (e) => { use12Keys = e.target.checked; });
-elToggleBasic.addEventListener('change', (e) => { activePools.basic7 = e.target.checked; });
-elToggleExt.addEventListener('change', (e) => { activePools.extended = e.target.checked; });
-elToggleAlt.addEventListener('change', (e) => { activePools.altered = e.target.checked; });
+elToggleBasic.addEventListener('change', (e) => { activePools.basic7 = e.target.checked; updateSRSStats(); });
+elToggleExt.addEventListener('change', (e) => { activePools.extended = e.target.checked; updateSRSStats(); });
+elToggleAlt.addEventListener('change', (e) => { activePools.altered = e.target.checked; updateSRSStats(); });
 elToggleTimer.addEventListener('change', (e) => { timerEnabled = e.target.checked; });
 elTogglePop.addEventListener('change', (e) => { usePopKeys = e.target.checked; });
 
