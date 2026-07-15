@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chord Reader Drill</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header / Stats -->
+    <div class="header">
+      <div class="title">Chord Reader Drill</div>
+      <div class="stats" id="stats">Count: 0  ·  Avg: 0.00s</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <label class="toggle">
+        <input type="checkbox" id="toggle-12keys">
+        <span>All 12 Keys</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-basic7" checked>
+        <span>Basic 7ths</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-extended">
+        <span>Extensions</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-altered">
+        <span>Altered</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-timer" checked>
+        <span>Timer</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-popkeys">
+        <span>Pop Keys (C G D A E)</span>
+      </label>
+    </div>
+
+    <!-- Timer + Chord Display -->
+    <div class="display">
+      <div class="timer-wrap">
+        <svg class="timer-svg" viewBox="0 0 200 200">
+          <circle class="timer-bg" cx="100" cy="100" r="90"/>
+          <circle class="timer-ring" id="timer-ring" cx="100" cy="100" r="90"
+                  stroke-dasharray="565.49" stroke-dashoffset="565.49"/>
+        </svg>
+        <div class="timer-text" id="timer-text">0.0s</div>
+      </div>
+      <div class="chord-symbol" id="chord-symbol">—</div>
+      <div class="held-notes" id="held-notes"></div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="btn-next" class="btn btn-primary">Next Chord (Space)</button>
+      <button id="btn-reveal" class="btn btn-secondary">Reveal (Enter)</button>
+    </div>
+
+    <!-- MIDI Status -->
+    <div class="midi-bar">
+      <button id="btn-midi" class="btn btn-small">Connect MIDI</button>
+      <span class="midi-status" id="midi-status">MIDI not connected</span>
+    </div>
+
+    <!-- Reveal Panel -->
+    <div class="reveal-panel hidden" id="reveal-panel">
+      <div class="reveal-row">
+        <span class="reveal-label">Chord Tones:</span>
+        <span class="reveal-value" id="reveal-tones"></span>
+      </div>
+      <div class="reveal-row">
+        <span class="reveal-label">Scale:</span>
+        <span class="reveal-value" id="reveal-scale"></span>
+      </div>
+      <div class="reveal-row">
+        <span class="reveal-label">Scale Notes:</span>
+        <span class="reveal-value" id="reveal-scale-notes"></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="theory.js"></script>
+  <script src="midi.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
