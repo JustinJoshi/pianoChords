@@ -14,6 +14,7 @@ let activePools = { basic7: true, extended: false, altered: false };
 let timerEnabled = true;
 let awaitingChord = false;
 let usePopKeys = false;
+let currentGraded = false;
 
 // ── DOM refs ──
 const elSymbol = document.getElementById('chord-symbol');
@@ -29,6 +30,7 @@ const elMIDIStatus = document.getElementById('midi-status');
 const elMIDIBtn = document.getElementById('btn-midi');
 const elStats = document.getElementById('stats');
 const elHeldNotes = document.getElementById('held-notes');
+const elGradeActions = document.getElementById('grade-actions');
 
 const elToggle12 = document.getElementById('toggle-12keys');
 const elToggleBasic = document.getElementById('toggle-basic7');
@@ -129,10 +131,46 @@ function updateSRSStats() {
   }
 }
 
+function recordGrade(grade) {
+  if (window.srs && currentChord?.chordKey) {
+    try {
+      window.srs.recordResult(currentChord.chordKey, grade);
+      updateSRSStats();
+
+      const ret = window.srs.getRetrievability(currentChord.chordKey);
+      const elRet = document.getElementById('reveal-retrievability');
+      if (elRet && ret !== null) {
+        elRet.textContent = `Strength: ${(ret * 100).toFixed(0)}%`;
+        elRet.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.error('SRS record error:', e);
+    }
+  }
+}
+
+function showGradeButtons() {
+  elGradeActions.classList.remove('hidden');
+  elReveal.classList.add('hidden');
+}
+
+function showNormalActions() {
+  elGradeActions.classList.add('hidden');
+  elReveal.classList.remove('hidden');
+}
+
+function onGrade(grade) {
+  if (currentGraded) return;
+  currentGraded = true;
+  recordGrade(grade);
+  showNormalActions();
+  nextRound();
+}
+
 // ── Drill flow ──
 function nextRound() {
-  // If user skipped without revealing, record as Again
-  if (awaitingChord && currentChord && window.srs) {
+  // If user skipped or revealed without grading, record as Again
+  if (!currentGraded && currentChord && window.srs) {
     try {
       window.srs.recordResult(currentChord.chordKey, 'Again');
       updateSRSStats();
@@ -158,10 +196,12 @@ function nextRound() {
   elRevealPanel.classList.add('hidden');
   elHeldNotes.textContent = '';
   awaitingChord = true;
+  currentGraded = false;
 
   const elRet = document.getElementById('reveal-retrievability');
   if (elRet) elRet.classList.add('hidden');
 
+  showNormalActions();
   setRequiredPitchClasses(Array.from(currentChord.requiredPitchClasses));
   startTimer();
   updateSRSStats();
@@ -171,46 +211,9 @@ function doReveal(auto = false) {
   if (!currentChord || !awaitingChord) return;
   awaitingChord = false;
 
-  const elapsedMs = recordTime();
-  const elapsedSec = elapsedMs / 1000;
+  recordTime();
 
-  // Determine FSRS grade
-  let grade;
-  if (auto) {
-    // Matched via MIDI before pressing Reveal
-    if (elapsedSec < TARGET_SECONDS * 0.5) grade = 'Easy';
-    else if (elapsedSec < TARGET_SECONDS) grade = 'Good';
-    else grade = 'Hard';
-  } else {
-    const midiConnected = midiAccess && midiAccess.inputs && midiAccess.inputs.size > 0;
-    if (midiConnected) {
-      // MIDI is connected but user pressed Reveal manually → failed to match
-      grade = 'Again';
-    } else {
-      // No MIDI — derive grade from reveal speed
-      if (elapsedSec < TARGET_SECONDS * 0.5) grade = 'Easy';
-      else if (elapsedSec < TARGET_SECONDS) grade = 'Good';
-      else if (elapsedSec < TARGET_SECONDS * 2) grade = 'Hard';
-      else grade = 'Again';
-    }
-  }
-
-  if (window.srs && currentChord.chordKey) {
-    try {
-      window.srs.recordResult(currentChord.chordKey, grade);
-      updateSRSStats();
-
-      const ret = window.srs.getRetrievability(currentChord.chordKey);
-      const elRet = document.getElementById('reveal-retrievability');
-      if (elRet && ret !== null) {
-        elRet.textContent = `Strength: ${(ret * 100).toFixed(0)}%`;
-        elRet.classList.remove('hidden');
-      }
-    } catch (e) {
-      console.error('SRS record error:', e);
-    }
-  }
-
+  // Show reveal panel
   elRevealPanel.classList.remove('hidden');
   elRevealTones.textContent = currentChord.tones.join('  ');
   elRevealScale.textContent = currentChord.scaleName;
@@ -219,6 +222,10 @@ function doReveal(auto = false) {
   if (auto) {
     elSymbol.classList.add('success');
   }
+
+  // Always show grade buttons — whether MIDI-matched or manually revealed,
+  // the user self-assesses how well they knew it.
+  showGradeButtons();
 }
 
 // ── MIDI integration ──
@@ -242,6 +249,11 @@ elNext.addEventListener('click', nextRound);
 elReveal.addEventListener('click', () => doReveal(false));
 elMIDIBtn.addEventListener('click', connectMIDI);
 
+// Grade buttons
+for (const btn of document.querySelectorAll('#grade-actions .btn-grade')) {
+  btn.addEventListener('click', (e) => onGrade(e.target.dataset.grade));
+}
+
 elToggle12.addEventListener('change', (e) => { use12Keys = e.target.checked; });
 elToggleBasic.addEventListener('change', (e) => { activePools.basic7 = e.target.checked; updateSRSStats(); });
 elToggleExt.addEventListener('change', (e) => { activePools.extended = e.target.checked; updateSRSStats(); });
@@ -249,10 +261,18 @@ elToggleAlt.addEventListener('change', (e) => { activePools.altered = e.target.c
 elToggleTimer.addEventListener('change', (e) => { timerEnabled = e.target.checked; });
 elTogglePop.addEventListener('change', (e) => { usePopKeys = e.target.checked; });
 
-// Keyboard shortcut: Space = next round, Enter = reveal
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); nextRound(); }
   if (e.code === 'Enter') { e.preventDefault(); doReveal(false); }
+
+  // Grade shortcuts when grade buttons are visible
+  if (elGradeActions && !elGradeActions.classList.contains('hidden')) {
+    if (e.key === '1') { e.preventDefault(); onGrade('Again'); }
+    if (e.key === '2') { e.preventDefault(); onGrade('Hard'); }
+    if (e.key === '3') { e.preventDefault(); onGrade('Good'); }
+    if (e.key === '4') { e.preventDefault(); onGrade('Easy'); }
+  }
 });
 
 // ── Init ──

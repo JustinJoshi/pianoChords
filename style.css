@@ -211,6 +211,43 @@ body {
   color: #fff;
 }
 
+/* Grade buttons */
+.grade-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.grade-actions.hidden {
+  display: none;
+}
+
+.btn-grade {
+  flex: 1;
+  padding: 12px 8px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.05s, opacity 0.15s;
+}
+
+.btn-grade:active {
+  transform: scale(0.97);
+}
+
+.btn-again { background: #ff6b6b; color: #fff; }
+.btn-again:hover { background: #ff5252; }
+
+.btn-hard { background: #ff9f43; color: #fff; }
+.btn-hard:hover { background: #ff8c33; }
+
+.btn-good { background: #4a9eff; color: #fff; }
+.btn-good:hover { background: #3a8eef; }
+
+.btn-easy { background: #4ade80; color: #0f1115; }
+.btn-easy:hover { background: #3acd70; }
+
 /* MIDI bar */
 .midi-bar {
   display: flex;
