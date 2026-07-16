@@ -6,8 +6,14 @@
  */
 import { createEmptyCard, fsrs, Rating, State } from 'https://esm.sh/ts-fsrs';
 
-const STORAGE_KEY = 'chordDrillSRSv2';
+const STORAGE_KEY = 'chordDrillSRSv3';
 const NEW_CARD_INTERVAL = 3;
+
+// Remove legacy SRS data from older formats
+try {
+  localStorage.removeItem('chordDrillSRS');
+  localStorage.removeItem('chordDrillSRSv2');
+} catch {}
 
 const scheduler = fsrs({
   request_retention: 0.9,
