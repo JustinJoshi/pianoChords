@@ -12,12 +12,14 @@ let totalTimeMs = 0;
 let use12Keys = false;
 let activePools = { basic7: true, extended: false, altered: false };
 let timerEnabled = true;
+let timerVisible = true;
 let awaitingChord = false;
 let usePopKeys = false;
 let currentGraded = false;
 
 // ── DOM refs ──
 const elSymbol = document.getElementById('chord-symbol');
+const elTimerWrap = document.querySelector('.timer-wrap');
 const elTimerRing = document.getElementById('timer-ring');
 const elTimerText = document.getElementById('timer-text');
 const elNext = document.getElementById('btn-next');
@@ -26,6 +28,7 @@ const elRevealPanel = document.getElementById('reveal-panel');
 const elRevealTones = document.getElementById('reveal-tones');
 const elRevealScale = document.getElementById('reveal-scale');
 const elRevealScaleNotes = document.getElementById('reveal-scale-notes');
+const elRevealTime = document.getElementById('reveal-time');
 const elMIDIStatus = document.getElementById('midi-status');
 const elMIDIBtn = document.getElementById('btn-midi');
 const elStats = document.getElementById('stats');
@@ -38,6 +41,7 @@ const elToggleBasic = document.getElementById('toggle-basic7');
 const elToggleExt = document.getElementById('toggle-extended');
 const elToggleAlt = document.getElementById('toggle-altered');
 const elToggleTimer = document.getElementById('toggle-timer');
+const elToggleShowTimer = document.getElementById('toggle-showtimer');
 const elTogglePop = document.getElementById('toggle-popkeys');
 
 // ── Constants ──
@@ -88,6 +92,10 @@ function startTimer() {
   timerStart = performance.now();
   elTimerRing.style.stroke = '#4a9eff';
   elTimerText.textContent = '0.0s';
+
+  if (elTimerWrap) {
+    elTimerWrap.classList.toggle('hidden-timer', !timerVisible);
+  }
 
   timerId = requestAnimationFrame(tick);
 }
@@ -244,7 +252,13 @@ function doReveal(auto = false) {
   if (!currentChord || !awaitingChord) return;
   awaitingChord = false;
 
-  recordTime();
+  const elapsedMs = recordTime();
+
+  // Display response time in reveal panel
+  if (elRevealTime) {
+    const elapsedSec = (elapsedMs / 1000).toFixed(2);
+    elRevealTime.textContent = elapsedSec + 's';
+  }
 
   // Show reveal panel
   elRevealPanel.classList.remove('hidden');
@@ -292,6 +306,7 @@ elToggleBasic.addEventListener('change', (e) => { activePools.basic7 = e.target.
 elToggleExt.addEventListener('change', (e) => { activePools.extended = e.target.checked; updateSRSStats(); });
 elToggleAlt.addEventListener('change', (e) => { activePools.altered = e.target.checked; updateSRSStats(); });
 elToggleTimer.addEventListener('change', (e) => { timerEnabled = e.target.checked; });
+elToggleShowTimer.addEventListener('change', (e) => { timerVisible = e.target.checked; });
 elTogglePop.addEventListener('change', (e) => { usePopKeys = e.target.checked; updateSRSStats(); });
 
 // Keyboard shortcuts
