@@ -1,16 +1,16 @@
 /**
  * SRS Module — ts-fsrs spaced repetition for chord drill
  *
- * One card per chord type (15 total). Root notes stay randomized;
- * only the chord *type* is scheduled.
+ * One card per (chord type, root note) combination = up to 180 cards.
+ * Root notes are now scheduled, not randomized.
  */
 import { createEmptyCard, fsrs, Rating, State } from 'https://esm.sh/ts-fsrs';
 
-const STORAGE_KEY = 'chordDrillSRS';
-const NEW_CARD_INTERVAL = 3; // minimum rounds between introducing new cards
+const STORAGE_KEY = 'chordDrillSRSv2';
+const NEW_CARD_INTERVAL = 3;
 
 const scheduler = fsrs({
-  request_retention: 0.9,   // Anki's "most important setting" — target 90% retention
+  request_retention: 0.9,
   enable_fuzz: true,
   enable_short_term: true,
   learning_steps: ['1m', '10m'],
@@ -21,6 +21,12 @@ let cards = {};
 let roundCount = 0;
 let lastNewCardRound = -NEW_CARD_INTERVAL;
 
+/* ── Helpers ── */
+
+function getCardId(chordKey, rootPc) {
+  return `${chordKey}:${rootPc}`;
+}
+
 /* ── Persistence ── */
 
 function loadCards() {
@@ -28,20 +34,21 @@ function loadCards() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      for (const key of Object.keys(CHORDS)) {
-        if (parsed[key]) {
-          cards[key] = deserializeCard(parsed[key]);
-        }
+      for (const key of Object.keys(parsed)) {
+        cards[key] = deserializeCard(parsed[key]);
       }
     }
   } catch (e) {
     console.error('SRS load error:', e);
   }
 
-  // Create empty cards for any missing chord types
-  for (const key of Object.keys(CHORDS)) {
-    if (!cards[key]) {
-      cards[key] = createEmptyCard();
+  // Ensure every (chord, root) combination has a card
+  for (const chordKey of Object.keys(CHORDS)) {
+    for (let rootPc = 0; rootPc < 12; rootPc++) {
+      const id = getCardId(chordKey, rootPc);
+      if (!cards[id]) {
+        cards[id] = createEmptyCard();
+      }
     }
   }
 }
@@ -76,7 +83,7 @@ function deserializeCard(data) {
 
 /* ── Selection ── */
 
-function getEligibleKeys(activePools) {
+function getEligibleChords(activePools) {
   let eligible = [];
   if (activePools.basic7) eligible.push(...POOLS.basic7);
   if (activePools.extended) eligible.push(...POOLS.extended);
@@ -85,18 +92,28 @@ function getEligibleKeys(activePools) {
   return eligible;
 }
 
-function getNextCard(activePools, lastChordKey) {
+function getNextCard(activePools, keySet, lastCardId) {
   roundCount++;
   const now = new Date();
-  const eligible = getEligibleKeys(activePools);
-  const withCards = eligible.map(key => ({ key, card: cards[key] }));
+  const eligibleChords = getEligibleChords(activePools);
 
-  // Avoid back-to-back same chord
-  const pool = lastChordKey
-    ? withCards.filter(c => c.key !== lastChordKey)
-    : withCards;
-  if (pool.length === 0 && withCards.length > 0) {
-    pool.push(...withCards);
+  // Build pool of (chordKey, rootPc) combinations
+  let pool = [];
+  for (const chordKey of eligibleChords) {
+    for (const rootPc of keySet) {
+      const id = getCardId(chordKey, rootPc);
+      pool.push({ chordKey, rootPc, card: cards[id], id });
+    }
+  }
+
+  // Avoid back-to-back same card
+  if (lastCardId) {
+    pool = pool.filter(c => c.id !== lastCardId);
+  }
+  if (pool.length === 0 && eligibleChords.length > 0 && keySet.length > 0) {
+    const fallbackRoot = keySet[0];
+    const fallbackChord = eligibleChords[0];
+    return { chordKey: fallbackChord, rootPc: fallbackRoot };
   }
 
   // Due cards (non-new)
@@ -107,36 +124,38 @@ function getNextCard(activePools, lastChordKey) {
   const dueLearning = dueCards.filter(({ card }) => card.state === State.Learning);
 
   if (dueReview.length > 0) {
-    return pickRandom(dueReview).key;
+    return pickRandom(dueReview);
   }
   if (dueLearning.length > 0) {
-    return pickRandom(dueLearning).key;
+    return pickRandom(dueLearning);
   }
 
   // Introduce new cards at a capped rate
   const newCards = pool.filter(({ card }) => card.state === State.New);
   if (newCards.length > 0 && (roundCount - lastNewCardRound) >= NEW_CARD_INTERVAL) {
     lastNewCardRound = roundCount;
-    return pickRandom(newCards).key;
+    return pickRandom(newCards);
   }
 
   // Fallback: earliest due date among eligible
   if (pool.length > 0) {
     pool.sort((a, b) => a.card.due - b.card.due);
-    return pool[0].key;
+    return pool[0];
   }
 
-  return eligible[0];
+  return { chordKey: eligibleChords[0], rootPc: keySet[0] };
 }
 
 function pickRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+  const item = arr[Math.floor(Math.random() * arr.length)];
+  return { chordKey: item.chordKey, rootPc: item.rootPc };
 }
 
 /* ── Grading ── */
 
-function recordResult(chordKey, grade) {
-  const card = cards[chordKey];
+function recordResult(chordKey, rootPc, grade) {
+  const id = getCardId(chordKey, rootPc);
+  const card = cards[id];
   if (!card) return;
 
   const now = new Date();
@@ -150,38 +169,64 @@ function recordResult(chordKey, grade) {
   }
 
   const result = scheduler.next(card, now, rating);
-  cards[chordKey] = result.card;
+  cards[id] = result.card;
   saveCards();
 }
 
-/* ── Stats & Retrievability ── */
+/* ── Stats & Meta ── */
 
-function getStats(activePools) {
+function getStats(activePools, keySet) {
   const now = new Date();
-  const eligible = getEligibleKeys(activePools);
+  const eligibleChords = getEligibleChords(activePools);
   let due = 0;
   let newCount = 0;
 
-  for (const key of eligible) {
-    const card = cards[key];
-    if (!card) continue;
-    if (card.state === State.New) {
-      newCount++;
-    } else if (card.due <= now) {
-      due++;
+  for (const chordKey of eligibleChords) {
+    for (const rootPc of keySet) {
+      const id = getCardId(chordKey, rootPc);
+      const card = cards[id];
+      if (!card) continue;
+      if (card.state === State.New) {
+        newCount++;
+      } else if (card.due <= now) {
+        due++;
+      }
     }
   }
   return { due, new: newCount };
 }
 
-function getRetrievability(chordKey) {
-  const card = cards[chordKey];
+function getRetrievability(chordKey, rootPc) {
+  const id = getCardId(chordKey, rootPc);
+  const card = cards[id];
   if (!card) return null;
   try {
     return scheduler.get_retrievability(card, new Date(), false);
   } catch {
     return null;
   }
+}
+
+function getCardMeta(chordKey, rootPc) {
+  const id = getCardId(chordKey, rootPc);
+  const card = cards[id];
+  if (!card) return null;
+
+  const stateNames = ['New', 'Learning', 'Review', 'Relearning'];
+  let ret = null;
+  try {
+    ret = scheduler.get_retrievability(card, new Date(), false);
+  } catch {}
+
+  return {
+    state: stateNames[card.state] || 'Unknown',
+    due: card.due,
+    stability: card.stability,
+    difficulty: card.difficulty,
+    reps: card.reps,
+    lapses: card.lapses,
+    retrievability: ret,
+  };
 }
 
 /* ── Init ── */
@@ -193,4 +238,5 @@ window.srs = {
   recordResult,
   getStats,
   getRetrievability,
+  getCardMeta,
 };

@@ -73,8 +73,8 @@ function formatChordSymbol(rootPc, chordKey) {
   return getNoteName(rootPc) + chord.symbol;
 }
 
-function generateChord(keySet, activePools, forcedChordKey = null) {
-  const rootPc = keySet[Math.floor(Math.random() * keySet.length)];
+function generateChord(keySet, activePools, forcedChordKey = null, forcedRootPc = null) {
+  const rootPc = forcedRootPc !== null ? forcedRootPc : keySet[Math.floor(Math.random() * keySet.length)];
 
   let chordKey;
   if (forcedChordKey && CHORDS[forcedChordKey]) {

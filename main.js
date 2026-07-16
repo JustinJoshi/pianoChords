@@ -31,6 +31,7 @@ const elMIDIBtn = document.getElementById('btn-midi');
 const elStats = document.getElementById('stats');
 const elHeldNotes = document.getElementById('held-notes');
 const elGradeActions = document.getElementById('grade-actions');
+const elCardMeta = document.getElementById('card-meta');
 
 const elToggle12 = document.getElementById('toggle-12keys');
 const elToggleBasic = document.getElementById('toggle-basic7');
@@ -42,6 +43,11 @@ const elTogglePop = document.getElementById('toggle-popkeys');
 // ── Constants ──
 const TARGET_SECONDS = 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * 90; // r=90
+
+// ── Helpers ──
+function getCurrentKeySet() {
+  return usePopKeys ? [0, 7, 2, 9, 4] : (use12Keys ? KEYS_12 : KEYS_5);
+}
 
 // ── localStorage ──
 function loadStats() {
@@ -119,11 +125,12 @@ function recordTime() {
   return elapsed;
 }
 
-// ── SRS stats ──
+// ── SRS stats & meta ──
 function updateSRSStats() {
   if (!window.srs) return;
   try {
-    const stats = window.srs.getStats(activePools);
+    const keySet = getCurrentKeySet();
+    const stats = window.srs.getStats(activePools, keySet);
     const el = document.getElementById('srs-stats');
     if (el) el.textContent = `Due: ${stats.due} · New: ${stats.new}`;
   } catch (e) {
@@ -131,13 +138,32 @@ function updateSRSStats() {
   }
 }
 
+function updateCardMeta() {
+  if (!window.srs || !currentChord) {
+    if (elCardMeta) elCardMeta.textContent = '';
+    return;
+  }
+  try {
+    const meta = window.srs.getCardMeta(currentChord.chordKey, currentChord.rootPc);
+    if (elCardMeta && meta) {
+      const dueStr = meta.due <= new Date()
+        ? 'Due now'
+        : `Due ${meta.due.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+      elCardMeta.textContent = `${meta.state} · ${dueStr} · Stab: ${meta.stability.toFixed(1)}d · Diff: ${meta.difficulty.toFixed(1)}`;
+    }
+  } catch (e) {
+    console.error('Card meta error:', e);
+    if (elCardMeta) elCardMeta.textContent = '';
+  }
+}
+
 function recordGrade(grade) {
-  if (window.srs && currentChord?.chordKey) {
+  if (window.srs && currentChord) {
     try {
-      window.srs.recordResult(currentChord.chordKey, grade);
+      window.srs.recordResult(currentChord.chordKey, currentChord.rootPc, grade);
       updateSRSStats();
 
-      const ret = window.srs.getRetrievability(currentChord.chordKey);
+      const ret = window.srs.getRetrievability(currentChord.chordKey, currentChord.rootPc);
       const elRet = document.getElementById('reveal-retrievability');
       if (elRet && ret !== null) {
         elRet.textContent = `Strength: ${(ret * 100).toFixed(0)}%`;
@@ -172,25 +198,31 @@ function nextRound() {
   // If user skipped or revealed without grading, record as Again
   if (!currentGraded && currentChord && window.srs) {
     try {
-      window.srs.recordResult(currentChord.chordKey, 'Again');
+      window.srs.recordResult(currentChord.chordKey, currentChord.rootPc, 'Again');
       updateSRSStats();
     } catch (e) {
       console.error('SRS skip-record error:', e);
     }
   }
 
-  const keySet = usePopKeys ? [0, 7, 2, 9, 4] : (use12Keys ? KEYS_12 : KEYS_5);
+  const keySet = getCurrentKeySet();
 
-  let nextChordKey = null;
+  let selection = null;
   if (window.srs) {
     try {
-      nextChordKey = window.srs.getNextCard(activePools, currentChord?.chordKey);
+      const lastId = currentChord ? `${currentChord.chordKey}:${currentChord.rootPc}` : null;
+      selection = window.srs.getNextCard(activePools, keySet, lastId);
     } catch (e) {
       console.error('SRS selection error:', e);
     }
   }
 
-  currentChord = generateChord(keySet, activePools, nextChordKey);
+  if (selection) {
+    currentChord = generateChord(keySet, activePools, selection.chordKey, selection.rootPc);
+  } else {
+    currentChord = generateChord(keySet, activePools);
+  }
+
   elSymbol.textContent = currentChord.symbol;
   elSymbol.classList.remove('success');
   elRevealPanel.classList.add('hidden');
@@ -205,6 +237,7 @@ function nextRound() {
   setRequiredPitchClasses(Array.from(currentChord.requiredPitchClasses));
   startTimer();
   updateSRSStats();
+  updateCardMeta();
 }
 
 function doReveal(auto = false) {
@@ -254,12 +287,12 @@ for (const btn of document.querySelectorAll('#grade-actions .btn-grade')) {
   btn.addEventListener('click', (e) => onGrade(e.target.dataset.grade));
 }
 
-elToggle12.addEventListener('change', (e) => { use12Keys = e.target.checked; });
+elToggle12.addEventListener('change', (e) => { use12Keys = e.target.checked; updateSRSStats(); });
 elToggleBasic.addEventListener('change', (e) => { activePools.basic7 = e.target.checked; updateSRSStats(); });
 elToggleExt.addEventListener('change', (e) => { activePools.extended = e.target.checked; updateSRSStats(); });
 elToggleAlt.addEventListener('change', (e) => { activePools.altered = e.target.checked; updateSRSStats(); });
 elToggleTimer.addEventListener('change', (e) => { timerEnabled = e.target.checked; });
-elTogglePop.addEventListener('change', (e) => { usePopKeys = e.target.checked; });
+elTogglePop.addEventListener('change', (e) => { usePopKeys = e.target.checked; updateSRSStats(); });
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {

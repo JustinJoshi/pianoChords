@@ -150,6 +150,14 @@ body {
   color: #4ade80;
 }
 
+.card-meta {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-align: center;
+  min-height: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .held-notes {
   font-size: 0.85rem;
   color: #6b7280;
